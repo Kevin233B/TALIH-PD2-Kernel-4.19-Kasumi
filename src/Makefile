@@ -37,6 +37,7 @@ kasumi_lkm-objs := \
 	features/kasumi_iop_override.o \
 	features/kasumi_fop_override.o \
 	features/kasumi_fake_mountinfo.o \
+	features/kasumi_owner.o \
 	features/kasumi_fake_selinuxfs_access.o
 
 kasumi_lkm-$(CONFIG_ARM64) += hooks/arm64/kasumi_patch_memory.o
