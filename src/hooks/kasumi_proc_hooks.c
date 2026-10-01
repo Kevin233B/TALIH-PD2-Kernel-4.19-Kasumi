@@ -103,7 +103,13 @@ static KASUMI_NOCFI int kasumi_queue_getfd_task_work(int __user *outp)
 {
 	struct kasumi_getfd_task_work *tw;
 
-	if (!outp || !access_ok(outp, sizeof(*outp)))
+	if (!outp ||
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+	    /* 4.19: access_ok() takes a type argument; arm64 ignores it. */
+	    !access_ok(VERIFY_WRITE, outp, sizeof(*outp)))
+#else
+	    !access_ok(outp, sizeof(*outp)))
+#endif
 		return -EFAULT;
 	if (!atomic_read_acquire(&kasumi_getfd_accepting))
 		return -ESHUTDOWN;

@@ -43,6 +43,48 @@
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <linux/xarray.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
+/* 4.19 predates the xarray API (added in 4.20). The policy uid sets
+ * are plain uid -> marker maps, so back them with the idr API via
+ * same-named local helpers; the 4.19 xarray.h stub declares none of
+ * these symbols, so there is no collision. */
+#include <linux/idr.h>
+static inline void xa_init(struct idr *xa)
+{
+	idr_init(xa);
+}
+static inline void xa_destroy(struct idr *xa)
+{
+	idr_destroy(xa);
+}
+static inline void *xa_load(struct idr *xa, u32 uid)
+{
+	return idr_find(xa, uid);
+}
+static inline void *xa_store(struct idr *xa, u32 uid, void *val,
+			      gfp_t gfp)
+{
+	u32 id = uid;
+	int ret = idr_alloc_u32(xa, val, &id, uid, gfp);
+
+	return ret < 0 ? ERR_PTR(ret) : val;
+}
+static inline int xa_err(void *entry)
+{
+	return IS_ERR_VALUE((unsigned long)entry) ? (int)(long)entry : 0;
+}
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
+/* openat2-style LOOKUP_ flags (added with openat2 in 5.6). They are
+ * carried in kasumi's own resolver flag space and do not collide
+ * with any 4.19 LOOKUP_ bit (4.19's highest is LOOKUP_DOWN 0x8000),
+ * so define the mainline values for older kernels. */
+#define LOOKUP_NO_SYMLINKS	0x010000
+#define LOOKUP_NO_MAGICLINKS	0x020000
+#define LOOKUP_BENEATH		0x080000
+#define LOOKUP_IN_ROOT		0x100000
+#define LOOKUP_CACHED		0x200000
+#endif
 #include <uapi/linux/magic.h>
 #ifndef EROFS_SUPER_MAGIC
 #define EROFS_SUPER_MAGIC 0xe0f5e1e2
@@ -107,8 +149,13 @@ struct kasumi_policy_snapshot {
 	u32 flags;
 	u32 allow_count;
 	u32 deny_count;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
+	struct idr allow_uids;
+	struct idr deny_uids;
+#else
 	struct xarray allow_uids;
 	struct xarray deny_uids;
+#endif
 	u32 *allow_uid_list;
 	u32 *deny_uid_list;
 };
@@ -274,7 +321,12 @@ static void kasumi_policy_snapshot_free_rcu(struct rcu_head *head)
 	kasumi_policy_snapshot_destroy(policy);
 }
 
-static int kasumi_policy_build_uid_list(struct xarray *xa, u32 **snapshot,
+static int kasumi_policy_build_uid_list(
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
+	struct idr *xa, u32 **snapshot,
+#else
+	struct xarray *xa, u32 **snapshot,
+#endif
 					u32 *snapshot_count, const u32 *uids,
 					u32 count)
 {

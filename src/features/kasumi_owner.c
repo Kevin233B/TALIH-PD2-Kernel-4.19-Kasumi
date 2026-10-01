@@ -228,8 +228,41 @@ static void kasumi_owner_mark_free(struct fsnotify_mark *mark)
 	kfree(mark);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+/*
+ * 4.19: fsnotify_ops has only ->handle_event(), whose file_name is a
+ * raw (const unsigned char *); translate to the handle_inode_event()
+ * shape kasumi_owner_event() is written for.
+ */
+static int kasumi_owner_handle_event(struct fsnotify_group *group,
+				     struct inode *inode, u32 mask,
+				     const void *data, int data_type,
+				     const unsigned char *file_name, u32 cookie,
+				     struct fsnotify_iter_info *iter_info)
+{
+	struct fsnotify_mark *mark =
+		iter_info->marks[FSNOTIFY_OBJ_TYPE_INODE];
+	struct qstr name;
+
+	if (!mark)
+		return 0;
+	if (file_name) {
+		name.name = file_name;
+		name.len = (unsigned int)strlen((const char *)file_name);
+		return kasumi_owner_event(mark, mask, inode, NULL,
+					    &name, cookie);
+	}
+	return kasumi_owner_event(mark, mask, inode, NULL, NULL,
+				      cookie);
+}
+#endif
+
 static const struct fsnotify_ops kasumi_owner_notify_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+    .handle_event = kasumi_owner_handle_event,
+#else
     .handle_inode_event = kasumi_owner_event,
+#endif
     .free_mark = kasumi_owner_mark_free,
 };
 
@@ -299,6 +332,11 @@ static int KASUMI_NOCFI kasumi_owner_watch(void)
 	ret =
 	    owner_add_mark(mark, file_inode(file), FSNOTIFY_OBJ_TYPE_INODE, 0);
 #else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+	/* 4.19: fsnotify_add_mark(mark, connp, type, allow_dups). */
+	ret = owner_add_mark(mark, &file_inode(file)->i_fsnotify_marks,
+			     FSNOTIFY_OBJ_TYPE_INODE, 1);
+#else
 	ret = owner_add_mark(mark, &file_inode(file)->i_fsnotify_marks,
 			     FSNOTIFY_OBJ_TYPE_INODE,
 #ifdef FSNOTIFY_GROUP_DUPS
@@ -307,6 +345,7 @@ static int KASUMI_NOCFI kasumi_owner_watch(void)
 			     1,
 #endif
 			     NULL);
+#endif
 #endif
 	owner_fput_sync(file);
 	if (ret)

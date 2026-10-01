@@ -25,6 +25,11 @@
 
 #include "kasumi_entrypoints.h"
 #include "kasumi_ftrace_hooks.h"
+/* kasumi_krp_* / kasumi_kp_* handlers are declared in
+ * kasumi_vfs_hooks.h; without this include they are only implicitly
+ * declared (tolerated by GCC as int(), an error under clang 16+ and
+ * under the -Werror-implicit-function-declaration kernels). */
+#include "kasumi_vfs_hooks.h"
 
 #define KASUMI_FTRACE_SLOT_DEPTH 16
 
