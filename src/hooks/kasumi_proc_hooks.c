@@ -19,6 +19,11 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/task_work.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+/* 4.19: task_work_add() takes a bool notify argument; TWA_RESUME just means
+ * "notify the task so the work runs before it returns to userspace". */
+#define TWA_RESUME true
+#endif
 #include <linux/vmalloc.h>
 #include <linux/jhash.h>
 #include <linux/file.h>

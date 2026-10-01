@@ -251,9 +251,17 @@ extern void (*kasumi_ihold)(struct inode *);
 extern long (*kasumi_strncpy_from_user_nofault)(char *dst, const void __user *src, long count);
 extern long (*kasumi_copy_from_user_nofault)(void *dst, const void __user *src, size_t size);
 extern long (*kasumi_copy_to_user_nofault)(void __user *dst, const void *src, size_t size);
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 extern int (*kasumi_task_work_add_ptr)(struct task_struct *task,
 				       struct callback_head *work,
 				       enum task_work_notify_mode notify);
+#else
+/* 4.19: int task_work_add(struct task_struct *, struct callback_head *, bool notify) */
+extern int (*kasumi_task_work_add_ptr)(struct task_struct *task,
+				       struct callback_head *work,
+				       bool notify);
+#endif
 extern struct llist_node *(*kasumi_llist_del_first_ptr)(
 	struct llist_head *head);
 struct llist_node *kasumi_llist_del_first(struct llist_head *head);

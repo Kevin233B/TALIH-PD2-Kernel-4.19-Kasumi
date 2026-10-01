@@ -25,6 +25,7 @@
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/version.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 
@@ -219,8 +220,15 @@ int kasumi_sop_shadow_register_dh(struct super_block *sb)
 	spare->sb_active_held = true;
 	spare->module_pin_held = true;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	if (!orig->destroy_inode && !orig->free_inode &&
 	    !kasumi_free_inode_nonrcu_ptr) {
+#else
+	/* 4.19: no ->free_inode member; ->destroy_inode owns inode
+	 * freeing, so without an original ->destroy_inode there is
+	 * nothing to hand the inode free on to. */
+	if (!orig->destroy_inode) {
+#endif
 		ret = -EOPNOTSUPP;
 		goto out_s_umount;
 	}
@@ -234,8 +242,10 @@ int kasumi_sop_shadow_register_dh(struct super_block *sb)
 	 * ever stored in inode->free_inode.
 	 */
 	spare->shadow_sop.destroy_inode = kasumi_sop_destroy_inode;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	if (!orig->destroy_inode && !orig->free_inode)
 		spare->shadow_sop.free_inode = kasumi_free_inode_nonrcu_ptr;
+#endif
 	spare->shadow_sop.evict_inode = kasumi_sop_evict_inode;
 	spare->shadow_sop.drop_inode = kasumi_sop_drop_inode;
 

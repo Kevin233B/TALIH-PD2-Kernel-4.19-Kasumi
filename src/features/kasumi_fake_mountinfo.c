@@ -30,6 +30,7 @@
 #include <linux/slab.h>
 #include <linux/sort.h>
 #include <linux/uio.h>
+#include <linux/version.h>
 #include <linux/vmalloc.h>
 
 static typeof(copy_mnt_ns) *kasumi_copy_mnt_ns;
@@ -257,11 +258,13 @@ kasumi_mi_read_snapshot(struct file *file, const struct file_operations *ops,
 
 	(*length) = 0;
 	for (;;) {
-		struct kiocb iocb;
-		struct iov_iter iter;
 		struct kvec vec;
 		char overflow;
 		ssize_t ret;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+		struct kiocb iocb;
+		struct iov_iter iter;
+#endif
 
 		if ((*length) == *capacity && *capacity < KASUMI_MI_MAX_SIZE) {
 			size_t size =
@@ -279,6 +282,7 @@ kasumi_mi_read_snapshot(struct file *file, const struct file_operations *ops,
 		    (*length) == *capacity ? &overflow : (*buffer) + (*length);
 		vec.iov_len =
 		    (*length) == *capacity ? 1 : *capacity - (*length);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 		iov_iter_kvec(&iter, READ, &vec, 1, vec.iov_len);
 		init_sync_kiocb(&iocb, file);
 		iocb.ki_pos = pos;
@@ -294,6 +298,19 @@ kasumi_mi_read_snapshot(struct file *file, const struct file_operations *ops,
 			return -EIO;
 		(*length) += ret;
 		pos = iocb.ki_pos;
+#else
+		/* 4.19: seq files serve ->read (seq_read), not ->read_iter, and
+		 * seq_read_iter() does not exist; read the way kernel-space code
+		 * of that era does, with kernel_read(). */
+		ret = kernel_read(file, vec.iov_base, vec.iov_len, &pos);
+		if (ret < 0)
+			return ret;
+		if (!ret)
+			return (*length) ? 0 : -EIO;
+		if ((*length) == *capacity)
+			return -EFBIG;
+		(*length) += ret;
+#endif
 	}
 }
 

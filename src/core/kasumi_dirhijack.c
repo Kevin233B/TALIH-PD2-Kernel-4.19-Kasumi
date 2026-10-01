@@ -1047,10 +1047,16 @@ void KASUMI_NOCFI kasumi_dh_reclaim_free_inode(struct inode *inode,
 {
 	if (kasumi_vnode_is_ours(inode))
 		kasumi_vnode_free_info(inode);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 	if (orig && orig->free_inode)
 		orig->free_inode(inode);
 	else if (kasumi_free_inode_nonrcu_ptr)
 		kasumi_free_inode_nonrcu_ptr(inode);
+#else
+	/* 4.19: no ->free_inode member; ->destroy_inode owns inode freeing. */
+	if (orig && orig->destroy_inode)
+		orig->destroy_inode(inode);
+#endif
 }
 
 void KASUMI_NOCFI kasumi_dh_reclaim_evict_inode(struct inode *inode,

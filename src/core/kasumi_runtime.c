@@ -469,9 +469,16 @@ void (*kasumi_ihold)(struct inode *);
 long (*kasumi_strncpy_from_user_nofault)(char *dst, const void __user *src, long count);
 long (*kasumi_copy_from_user_nofault)(void *dst, const void __user *src, size_t size);
 long (*kasumi_copy_to_user_nofault)(void __user *dst, const void *src, size_t size);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 int (*kasumi_task_work_add_ptr)(struct task_struct *task,
 				struct callback_head *work,
 				enum task_work_notify_mode notify);
+#else
+/* 4.19: task_work_add() takes a bool notify argument */
+int (*kasumi_task_work_add_ptr)(struct task_struct *task,
+				struct callback_head *work,
+				bool notify);
+#endif
 struct llist_node *(*kasumi_llist_del_first_ptr)(struct llist_head *head);
 ssize_t (*kasumi_seq_read_iter_ptr)(struct kiocb *iocb,
 				    struct iov_iter *iter);
