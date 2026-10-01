@@ -50,8 +50,41 @@ static void hide_free_mark(struct fsnotify_mark *mark)
 	kfree(container_of(mark, struct kasumi_hide_watch, mark));
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+/*
+ * 4.19: fsnotify_ops has only ->handle_event(), whose file_name is a
+ * raw (const unsigned char *); translate to the handle_inode_event()
+ * shape hide_directory_event() is written for.
+ */
+static int hide_handle_event(struct fsnotify_group *group,
+			     struct inode *inode, u32 mask,
+			     const void *data, int data_type,
+			     const unsigned char *file_name, u32 cookie,
+			     struct fsnotify_iter_info *iter_info)
+{
+	struct fsnotify_mark *mark =
+		iter_info->marks[FSNOTIFY_OBJ_TYPE_INODE];
+	struct qstr name;
+
+	if (!mark)
+		return 0;
+	if (file_name) {
+		name.name = file_name;
+		name.len = (unsigned int)strlen((const char *)file_name);
+		return hide_directory_event(mark, mask, inode, NULL,
+					    &name, cookie);
+	}
+	return hide_directory_event(mark, mask, inode, NULL, NULL,
+				      cookie);
+}
+#endif
+
 static const struct fsnotify_ops hide_directory_ops = {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
+    .handle_event = hide_handle_event,
+#else
     .handle_inode_event = hide_directory_event,
+#endif
     .free_mark = hide_free_mark,
 };
 
@@ -76,6 +109,11 @@ static int KASUMI_NOCFI hide_watch_add(struct kasumi_hide_events *events,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 	ret = hide_add_mark(&watch->mark, inode, FSNOTIFY_OBJ_TYPE_INODE, 0);
 #else
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+	/* 4.19: fsnotify_add_mark(mark, connp, type, allow_dups). */
+	ret = hide_add_mark(&watch->mark, &inode->i_fsnotify_marks,
+			    FSNOTIFY_OBJ_TYPE_INODE, 1);
+#else
 	ret = hide_add_mark(&watch->mark, &inode->i_fsnotify_marks,
 			    FSNOTIFY_OBJ_TYPE_INODE,
 #ifdef FSNOTIFY_GROUP_DUPS
@@ -84,6 +122,7 @@ static int KASUMI_NOCFI hide_watch_add(struct kasumi_hide_events *events,
 			    1,
 #endif
 			    NULL);
+#endif
 #endif
 	if (ret) {
 		hide_put_mark(&watch->mark);
