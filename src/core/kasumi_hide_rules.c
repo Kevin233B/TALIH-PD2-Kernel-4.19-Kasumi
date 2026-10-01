@@ -2,6 +2,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
+#include <linux/version.h>
 
 #include "kasumi_dirhijack.h"
 #include "kasumi_hide_events.h"
@@ -245,7 +246,13 @@ void kasumi_hide_rules_stop(void)
 bool kasumi_hide_rules_quiesce(void)
 {
 	hide_stop_new();
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
+	/* 4.19: no non-blocking cancel_work(); cancel_work_sync() also
+	 * drains an executing hide_workfn(), which suits quiesce(). */
+	if (cancel_work_sync(&hide_work))
+#else
 	if (cancel_work(&hide_work))
+#endif
 		atomic_dec(&hide_jobs);
 	if (atomic_read(&hide_jobs))
 		return false;
